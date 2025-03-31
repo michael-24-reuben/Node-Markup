@@ -1,0 +1,27 @@
+{
+  "manifest_version": 3,
+  "name": "Node Markup",
+  "description": "Node Markup is an extension designed to facilitate editing and documenting HTML elements. In its current version (1.0), it allows users to highlight elements on hover and provides options to copy element details.",
+  "version": "1.0",
+  "permissions": ["storage", "contextMenus", "clipboardWrite", "scripting", "activeTab"],
+  "host_permissions": ["<all_urls>"],
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": "assets/icons/icon.png"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "css": ["styles.css"]
+    }
+  ],
+  "icons": {
+    "16": "assets/icons/icon.png",
+    "48": "assets/icons/icon.png",
+    "128": "assets/icons/icon.png"
+  }
+}

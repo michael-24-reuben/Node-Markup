@@ -1,0 +1,155 @@
+.hover-highlight {
+    outline: 2px solid red !important;
+    background-color: rgba(255, 0, 0, 0.2) !important;
+}
+
+.hidden {
+    display: none;
+}
+
+.el-tracer-btn {
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    height: 56px;
+    font-family: Arial, sans-serif;
+    font-weight: bold;
+    transition: all 0.1s ease-out;
+    padding: 0 12px;
+    box-sizing: border-box;
+    overflow: hidden;
+}
+.el-tracer-btn.el-tracer-popup {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    opacity: 0;
+    transition: opacity 0.5s ease-out, transform 0.5s ease-out;
+    z-index: 9999;
+}
+
+.el-tracer-btn.show {
+    opacity: 1;
+    transform: translateX(-50%) translateY(-10px);
+}
+
+.el-tracer-btn.el-tracer-event-fail {
+    background-color: #ab1d1d;
+    color: #fff;
+    text-decoration: none;
+    border: 3px solid #fff;
+    outline: 3px solid #000;
+    box-shadow: 6px 6px 12px #c03b3b;
+}
+.el-tracer-btn.el-tracer-event-success {
+    background-color: #1d64ab;
+    color: #fff;
+    text-decoration: none;
+    border: 3px solid #fff;
+    outline: 3px solid #000;
+    box-shadow: 6px 6px 12px #006b9a;
+}
+
+.el-tracer-btn::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(
+            90deg,
+            transparent,
+            rgba(255, 255, 255, 0.8),
+            transparent
+    );
+    z-index: 1;
+    transition: none;
+    opacity: 0;
+}
+
+@keyframes slide {
+    0% {
+        left: -100%;
+    }
+    100% {
+        left: 100%;
+    }
+}
+
+.el-tracer-btn:hover::before {
+    opacity: 1;
+    animation: slide 2s infinite;
+}
+
+.el-tracer-btn.el-tracer-event-success:hover {
+    background-color: #296FBBFF;
+    color: #fff;
+}
+.el-tracer-btn.el-tracer-event-fail:hover {
+    background-color: #bb2929;
+    color: #fff;
+}
+
+.el-tracer-btn.el-tracer-event-success:active {
+    box-shadow: 3px 3px 6px #00a4ef;
+}
+.el-tracer-btn.el-tracer-event-fail:active {
+    box-shadow: 3px 3px 6px #ef0000;
+}
+
+.ms-logo {
+    margin-right: 8px;
+    transition: transform 0.2s ease-out;
+    position: relative;
+    z-index: 1;
+}
+
+.el-tracer-btn:hover .ms-logo {
+    transform: rotate(-10deg) scale(1.1);
+}
+
+.el-tracer-btn:active .ms-logo {
+    transform: scale(0.9);
+}
+
+.el-tracer-button-text {
+    display: flex;
+    flex-direction: column;
+    line-height: 1.2;
+    transition: transform 0.2s ease-out;
+    position: relative;
+    z-index: 1;
+}
+
+.el-tracer-btn:hover .el-tracer-button-text {
+    transform: skew(-5deg);
+}
+
+.el-tracer-btn:active .el-tracer-button-text {
+    transform: skew(0deg);
+}
+
+.el-tracer-btn.el-tracer-event-fail > .el-tracer-button-text > span:nth-child(2)::before {
+    content: "Failed!";
+}
+.el-tracer-btn.el-tracer-event-success > .el-tracer-button-text > span:nth-child(2)::before {
+    content: "Succeeded!";
+}
+
+.el-tracer-btn.el-tracer-event-success > .ms-logo > svg path.code-state-indicator {
+    display: initial;
+}
+.el-tracer-btn.el-tracer-event-fail > .ms-logo > svg path.fail-state-indicator {
+    display: initial;
+}
+
+.el-tracer-button-text span:first-child {
+    font-size: 11px;
+    text-transform: uppercase;
+}
+.el-tracer-button-text span:last-child {
+    font-size: 16px;
+    text-transform: uppercase;
+}
