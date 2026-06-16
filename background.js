@@ -1,204 +1,294 @@
 /**
  * "el-copy.outerHTML" -> copy outerHTML
- * "el-copy.selector" -> copy selector
- * "el-copy.full-selector" -> copy full selector
+ * "el-copy.full-selector" -> copy selector
  * "el-copy.js-path" -> copy JS path
- * "el-copy.xpath" -> copy XPath
- * "el-copy.full-xpath" -> copy full XPath
+ * "el-copy.full-xpath" -> copy XPath
+ * "el-markdown.convert" -> render selected HTML as Markdown
  */
+
+const TRACKING_KEY_PREFIX = "trackingEnabled_";
+const SELECTION_KEY_PREFIX = "rightClickedElement_";
+const SETTINGS_STORAGE_KEY = "nodeMarkupSettings";
+const DEFAULT_SETTINGS = {
+    selectorPathMode: "full",
+    xpathPathMode: "full",
+    metadataEnabled: false,
+    metadataPosition: "top-right",
+    highlightTemplate: "red",
+    customHighlight: {
+        backgroundColor: "#ff0000",
+        backgroundOpacity: 0.2,
+        borderEnabled: true,
+        borderColor: "#ff0000",
+        borderWidth: 2,
+    },
+    markdownOptions: {
+        preferNativeParser: false,
+        codeFence: "```",
+        bulletMarker: "*",
+        codeBlockStyle: "fenced",
+        emDelimiter: "_",
+        strongDelimiter: "**",
+        strikeDelimiter: "~~",
+        maxConsecutiveNewlines: 3,
+        keepDataImages: false,
+        useLinkReferenceDefinitions: false,
+        useInlineLinks: true,
+        ignore: "",
+        blockElements: "",
+    },
+};
+
 chrome.runtime.onInstalled.addListener(() => {
-    chrome.contextMenus.create({
-        id: "el-copy.outerHTML",
-        title: "copy outerHTML",
-        contexts: ["all"]
-    });
-
-    chrome.contextMenus.create({
-        id: "el-copy.selector",
-        title: "Copy selector",
-        contexts: ["all"]
-    });
-
-    chrome.contextMenus.create({
-        id: "el-copy.full-selector",
-        title: "Copy full selector",
-        contexts: ["all"]
-    });
-
-    chrome.contextMenus.create({
-        id: "el-copy.js-path",
-        title: "Copy JS path",
-        contexts: ["all"]
-    });
-
-    chrome.contextMenus.create({
-        id: "el-copy.xpath",
-        title: "copy XPath",
-        contexts: ["all"]
-    });
-
-    chrome.contextMenus.create({
-        id: "el-copy.full-xpath",
-        title: "copy full XPath",
-        contexts: ["all"]
-    });
-
-});
-
-chrome.contextMenus.onClicked.addListener((info, tab) => {
-    chrome.storage.local.get("rightClickedElement", (data) => {
-        let uniqueClass = data.rightClickedElement;
-        if (!uniqueClass) return;
-
-        chrome.scripting.executeScript({
-            target: {tabId: tab.id},
-            function: copyElementInfo,
-            args: [
-                info.menuItemId, // action
-                uniqueClass      // uniqueClass
-            ]
+    chrome.contextMenus.removeAll(() => {
+        [
+            { id: "el-copy.text", title: "Copy text" },
+            { id: "separator-1", type: "separator" },
+            { id: "el-copy.outerHTML", title: "Copy outerHTML" },
+            { id: "el-markdown.convert", title: "Convert to Markdown" },
+            // { id: "el-copy.selector", title: "Copy relative selector" },
+            { id: "el-copy.full-selector", title: "Copy selector" },
+            { id: "el-copy.js-path", title: "Copy JS path" },
+            // { id: "el-copy.xpath", title: "Copy relative XPath" },
+            { id: "el-copy.full-xpath", title: "Copy XPath" },
+            { id: "separator-2", type: "separator" },
+            { id: "el-markup.launch", title: "More (coming soon...)" },
+        ].forEach((item) => {
+            chrome.contextMenus.create({
+                ...item,
+                contexts: ["all"],
+            });
         });
     });
 });
 
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    const tabId = sender.tab?.id;
+    if (!message?.type) return;
 
-function copyElementInfo(action, uniqueClass) {
-    let selectedElement = document.querySelector(".hover-highlight");
+    switch (message.type) {
+        case "NODE_MARKUP_SET_SELECTION":
+            if (typeof tabId !== "number") {
+                sendResponse({ ok: false });
+                return;
+            }
+
+            if (!message.selectionClass) {
+                sendResponse({ ok: false });
+                return;
+            }
+
+            setSessionValue(getSelectionKey(tabId), message.selectionClass)
+                .then(() => sendResponse({ ok: true }))
+                .catch((error) => sendResponse({ ok: false, error: error?.message }));
+            return true;
+
+        case "NODE_MARKUP_GET_TRACKING_STATE":
+            if (typeof tabId !== "number") {
+                sendResponse({ trackingEnabled: false });
+                return;
+            }
+
+            getSessionValue(getTrackingKey(tabId))
+                .then((trackingEnabled) => sendResponse({ trackingEnabled: Boolean(trackingEnabled) }))
+                .catch(() => sendResponse({ trackingEnabled: false }));
+            return true;
+
+        case "NODE_MARKUP_GET_SETTINGS":
+            getStoredSettings()
+                .then((settings) => sendResponse({ settings }))
+                .catch(() => sendResponse({ settings: DEFAULT_SETTINGS }));
+            return true;
+
+        default:
+            return;
+    }
+});
+
+chrome.contextMenus.onClicked.addListener((info, tab) => {
+    if (!tab?.id) return;
+    void handleContextMenuClick(info.menuItemId, tab.id);
+});
+
+async function handleContextMenuClick(action, tabId) {
+    try {
+        const selectionClass = await getSelectionClass(tabId);
+        if (!selectionClass) return;
+        const settings = await getStoredSettings();
+
+        if (action === "el-markdown.convert") {
+            await sendMessageToTab(tabId, {
+                type: "NODE_MARKUP_CONVERT_SELECTION_TO_MARKDOWN",
+                selectionClass,
+                settings,
+            });
+            return;
+        }
+
+        await chrome.scripting.executeScript({
+            target: { tabId },
+            func: copyElementInfo,
+            args: [action, selectionClass, settings],
+        });
+    } catch (error) {
+        console.warn("Unable to copy element info:", error);
+    } finally {
+        await removeSessionValue(getSelectionKey(tabId));
+    }
+}
+
+async function getSelectionClass(tabId) {
+    try {
+        const response = await sendMessageToTab(tabId, { type: "NODE_MARKUP_GET_SELECTION" });
+        if (response?.selectionClass) return response.selectionClass;
+    } catch {
+        // Ignore and fall back to session storage.
+    }
+
+    return getSessionValue(getSelectionKey(tabId));
+}
+
+function copyElementInfo(action, selectionClass, settings = {}) {
+    const selectorRelative = settings.selectorPathMode === "relative";
+    const xpathRelative = settings.xpathPathMode === "relative";
+    let selectedElement = document.querySelector(`.${selectionClass}`);
 
     if (!selectedElement && typeof document !== "undefined") {
-        selectedElement = document.querySelector(`.${uniqueClass}`);
+        selectedElement = document.querySelector(".hover-highlight");
     }
 
     if (!selectedElement) {
-        console.warn(`Unable to determine element: No valid selector for ${action}`);
+        showPopup("Failed to copy.", false);
         return;
     }
 
-    // Check if andThen is a function before calling it
-    selectedElement.classList.remove("hover-highlight", uniqueClass);
+    selectedElement.classList.remove("hover-highlight", selectionClass);
 
     let textToCopy = "";
     switch (action) {
+        case "el-copy.text":
+            textToCopy = selectedElement.textContent.trim();
+            break;
         case "el-copy.outerHTML":
             textToCopy = selectedElement.outerHTML;
             break;
         case "el-copy.selector":
-            textToCopy = getElementSelector(selectedElement, true);
-            break;
         case "el-copy.full-selector":
-            textToCopy = getElementSelector(selectedElement); // element, relative (default: false)
+            textToCopy = getElementSelector(selectedElement, selectorRelative);
             break;
         case "el-copy.js-path":
-            textToCopy = "document.querySelector(\"" + getElementSelector(selectedElement, true) + "\")";
+            textToCopy = `document.querySelector(${JSON.stringify(getElementSelector(selectedElement, selectorRelative))})`;
             break;
         case "el-copy.xpath":
-            textToCopy = getXPath(selectedElement, true);
-            break;
         case "el-copy.full-xpath":
-            textToCopy = getXPath(selectedElement);
+            textToCopy = getXPath(selectedElement, xpathRelative);
             break;
+        case "el-markup.launch":
+            showPopup("More options coming soon...", false);
+            return;
+        default:
+            showPopup("Failed to copy.", false);
+            return;
     }
 
-    let successState = false;
     if (textToCopy) {
-        copyToClipboard(textToCopy).then(() => {
-            showPopup("Copied successfully!", true);
-            successState = true;
-        }).catch(() => showPopup("Failed to copy.", false));
+        copyToClipboard(textToCopy)
+            .then(() => showPopup("Copied successfully!", true))
+            .catch(() => showPopup("Failed to copy.", false));
     } else {
         showPopup("Failed to copy.", false);
     }
 
-    // Safer clipboard copying
     function copyToClipboard(text) {
         return navigator.clipboard.writeText(text);
     }
 
     /**
-     * Generate a CSS selector for a given DOM element
-     * @param {HTMLElement} element - The DOM element to generate a selector for
-     * @param {boolean} [relative=false] - Whether to generate a relative or absolute selector
-     * @returns {string} CSS selector for the element
+     * Generate a CSS selector for a given DOM element.
+     * @param {HTMLElement} element
+     * @param {boolean} [relative=false]
+     * @returns {string}
      */
     function getElementSelector(element, relative = false) {
-        return elementSelectors(element, relative).join(' > ');
-    }
+        if (!(element instanceof Element)) return "";
 
-    function elementSelectors(element, relative = false) {
-        if (!(element instanceof Element)) return [];
+        const anchor = relative ? element.closest("[id]") : document.documentElement;
+        const parts = [];
+        let current = element;
 
-        let parts = [];
-        while (element && element.nodeType === Node.ELEMENT_NODE) {
-            if (relative && element.id) {
-                parts.unshift(`#${esc(element.id)}`);
+        while (current && current.nodeType === Node.ELEMENT_NODE) {
+            if (current === anchor) {
+                parts.unshift(current === document.documentElement ? "html" : formatSelectorSegment(current, true));
                 break;
             }
 
-            let selector = element.tagName.toLowerCase();
-            if (element.id) {
-                selector += `#${esc(element.id)}`;
-            }
-
-            let sibling = element;
-            let nthOfType = 1;
-            let nthChild = 1;
-            while ((sibling = sibling.previousElementSibling)) {
-                if (sibling.tagName.toLowerCase() === element.tagName.toLowerCase()) {
-                    nthOfType++;
-                }
-                nthChild++;
-            }
-
-            if (nthOfType > 1) {
-                selector += `:nth-child(${nthChild})`;
-            }
-
-            parts.unshift(selector);
-
-            if (!relative && element.tagName.toLowerCase() === 'body') break;
-            element = element.parentElement;
+            parts.unshift(formatSelectorSegment(current, false));
+            current = current.parentElement;
         }
 
-        return parts;
+        return parts.join(" > ");
+    }
+
+    function formatSelectorSegment(element, useIdOnly = false) {
+        const tagName = element.tagName.toLowerCase();
+
+        if (useIdOnly && element.id) {
+            return `#${cssEscape(element.id)}`;
+        }
+
+        if (element.id) {
+            return `${tagName}#${cssEscape(element.id)}`;
+        }
+
+        const parent = element.parentElement;
+        const siblings = parent
+            ? Array.from(parent.children).filter((sibling) => sibling.tagName === element.tagName)
+            : [element];
+        const index = Math.max(1, siblings.indexOf(element) + 1);
+
+        return `${tagName}:nth-of-type(${index})`;
     }
 
     /**
-     * Generate an XPath for a given DOM element
-     * @param {HTMLElement} element - The DOM element to generate XPath for
-     * @param {boolean} [relative=false] - Whether to generate a relative or absolute XPath
-     * @returns {string} XPath for the element
+     * Generate an XPath for a given DOM element.
+     * @param {HTMLElement} element
+     * @param {boolean} [relative=false]
+     * @returns {string}
      */
     function getXPath(element, relative = false) {
-        if (!(element instanceof Element)) return '';
+        if (!(element instanceof Element)) return "";
 
-        let parts = [];
-        while (element && element.nodeType === Node.ELEMENT_NODE) {
-            if (relative && element.id) {
-                parts.unshift(`//*[@id='${element.id}']`);
-                return parts.join('/');
+        const parts = [];
+        const anchor = relative ? element.closest("[id]") : null;
+        let current = element;
+
+        while (current && current.nodeType === Node.ELEMENT_NODE) {
+            if (anchor && current === anchor) {
+                parts.unshift(`*[@id='${current.id}']`);
+                break;
             }
 
+            const tag = current.tagName.toLowerCase();
             let index = 1;
-            let sibling = element;
+            let sibling = current;
+
             while ((sibling = sibling.previousElementSibling)) {
-                if (sibling.tagName.toLowerCase() === element.tagName.toLowerCase()) {
+                if (sibling.tagName.toLowerCase() === current.tagName.toLowerCase()) {
                     index++;
                 }
             }
 
-            let tag = element.tagName.toLowerCase();
-            let path = index > 1 || element.nextElementSibling? `${tag}[${index}]` : `${tag}`;
-            parts.unshift(path);
+            parts.unshift(index > 1 || current.nextElementSibling ? `${tag}[${index}]` : tag);
 
-            if (!relative && element.tagName.toLowerCase() === 'html') break;
-            element = element.parentElement;
+            if (!relative && current.tagName.toLowerCase() === "html") break;
+            current = current.parentElement;
         }
 
-        return '/' + parts.join('/');
+        return relative && anchor ? `//${parts.join("/")}` : `/${parts.join("/")}`;
     }
 
     function showPopup(message, success = true) {
-        let popup = initAlertBox(success);
+        const popup = initAlertBox(success);
         document.body.appendChild(popup);
 
         // Trigger animation (delay to ensure CSS applies)
@@ -212,7 +302,7 @@ function copyElementInfo(action, uniqueClass) {
     }
 
     function initAlertBox(successState = false) {
-        const eventState = successState? "el-tracer-event-success" : "el-tracer-event-fail";
+        const eventState = successState ? "el-tracer-event-success" : "el-tracer-event-fail";
         const alertButton = `
         <button id="el-tracker-alert-box" class="el-tracer-btn el-tracer-popup ${eventState}">
             <div class="ms-logo">
@@ -232,12 +322,81 @@ function copyElementInfo(action, uniqueClass) {
             </div>
         </button>`;
 
-        const alertBoxElement = document.createElement('div');
+        const alertBoxElement = document.createElement("div");
         alertBoxElement.innerHTML = alertButton.trim();
         return alertBoxElement.firstElementChild;
     }
 
-    function esc(selector) {
-        return selector.replace(/([.#:[\](/)>,+~*^$= ])/g, '\\$1');
+    function cssEscape(value) {
+        if (typeof CSS !== "undefined" && typeof CSS.escape === "function") {
+            return CSS.escape(value);
+        }
+
+        return String(value).replace(/([.#:[\]()/>,+~*^$= ])/g, "\\$1");
     }
+}
+
+function setSessionValue(key, value) {
+    return new Promise((resolve) => {
+        chrome.storage.session.set({ [key]: value }, resolve);
+    });
+}
+
+function getSessionValue(key) {
+    return new Promise((resolve) => {
+        chrome.storage.session.get(key, (data) => resolve(data[key]));
+    });
+}
+
+function removeSessionValue(key) {
+    return new Promise((resolve) => {
+        chrome.storage.session.remove(key, resolve);
+    });
+}
+
+function getStoredSettings() {
+    return new Promise((resolve) => {
+        chrome.storage.sync.get(SETTINGS_STORAGE_KEY, (data) => {
+            resolve(normalizeSettings(data[SETTINGS_STORAGE_KEY]));
+        });
+    });
+}
+
+function normalizeSettings(settings = {}) {
+    const customHighlight = {
+        ...DEFAULT_SETTINGS.customHighlight,
+        ...(settings.customHighlight ?? {}),
+    };
+    const markdownOptions = {
+        ...DEFAULT_SETTINGS.markdownOptions,
+        ...(settings.markdownOptions ?? {}),
+    };
+
+    return {
+        ...DEFAULT_SETTINGS,
+        ...settings,
+        customHighlight,
+        markdownOptions,
+    };
+}
+
+function sendMessageToTab(tabId, message) {
+    return new Promise((resolve, reject) => {
+        chrome.tabs.sendMessage(tabId, message, (response) => {
+            if (chrome.runtime.lastError) {
+                reject(new Error(chrome.runtime.lastError.message));
+                return;
+            }
+
+            resolve(response);
+        });
+    });
+}
+
+function getTrackingKey(tabId) {
+    return `${TRACKING_KEY_PREFIX}${tabId}`;
+}
+
+function getSelectionKey(tabId) {
+    return `${SELECTION_KEY_PREFIX}${tabId}`;
 }

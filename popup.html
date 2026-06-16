@@ -25,6 +25,10 @@
             font-family: "Arial", sans-serif;
         }
 
+        .el-tracer-popup--settings-open {
+            width: 420px;
+        }
+
         .el-tracer-card__header {
             display: flex;
             align-items: center;
@@ -137,6 +141,267 @@
             transform: translate(5px, 5px);
             box-shadow: none;
         }
+
+        .el-tracer-dock {
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+            min-height: 46px;
+            margin-top: 0.75rem;
+            padding-top: 0.75rem;
+            border-top: 2px solid #000;
+        }
+
+        .el-tracer-icon-button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 42px;
+            height: 42px;
+            border: 3px solid #000;
+            background-color: #fff;
+            color: #000;
+            box-shadow: 5px 5px 0 #000;
+            cursor: pointer;
+            position: relative;
+            transition: all 0.2s ease;
+        }
+
+        .el-tracer-icon-button:hover {
+            transform: translate(-2px, -2px);
+            box-shadow: 7px 7px 0 #000;
+        }
+
+        .el-tracer-icon-button:active {
+            transform: translate(5px, 5px);
+            box-shadow: none;
+        }
+
+        .el-tracer-icon-button[aria-expanded="true"] {
+            background-color: #000;
+            color: #fff;
+        }
+
+        .el-tracer-icon-button__icon {
+            width: 22px;
+            height: 22px;
+            background-color: currentColor;
+            -webkit-mask: url("assets/icons/setting.svg") center / contain no-repeat;
+            mask: url("assets/icons/setting.svg") center / contain no-repeat;
+        }
+
+        .el-tracer-settings {
+            display: none;
+            margin-top: 1rem;
+            border-top: 2px solid #000;
+            padding-top: 1rem;
+        }
+
+        .el-tracer-settings.is-open {
+            display: block;
+        }
+
+        .el-tracer-settings__group {
+            margin-bottom: 1rem;
+        }
+
+        .el-tracer-settings__title {
+            margin-bottom: 0.5rem;
+            font-size: 0.75rem;
+            font-weight: 900;
+            text-transform: uppercase;
+        }
+
+        .el-tracer-settings__row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.75rem;
+            margin-bottom: 0.5rem;
+            font-size: 0.82rem;
+            font-weight: 700;
+        }
+
+        .el-tracer-segmented {
+            display: inline-grid;
+            grid-template-columns: repeat(2, 1fr);
+            border: 2px solid #000;
+        }
+
+        .el-tracer-segmented label {
+            min-width: 70px;
+            padding: 0.35rem 0.5rem;
+            text-align: center;
+            cursor: pointer;
+            font-size: 0.72rem;
+            font-weight: 900;
+            text-transform: uppercase;
+        }
+
+        .el-tracer-segmented label + label {
+            border-left: 2px solid #000;
+        }
+
+        .el-tracer-segmented input {
+            position: absolute;
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .el-tracer-segmented label:has(input:checked) {
+            background-color: #000;
+            color: #fff;
+        }
+
+        .el-tracer-toggle {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            cursor: pointer;
+            font-size: 0.82rem;
+            font-weight: 800;
+        }
+
+        .el-tracer-toggle input {
+            width: 18px;
+            height: 18px;
+            accent-color: #000;
+        }
+
+        .el-tracer-position-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 0.35rem;
+        }
+
+        .el-tracer-position-grid button,
+        .el-tracer-template,
+        .el-tracer-customize input[type="color"] {
+            border: 2px solid #000;
+            background-color: #fff;
+            color: #000;
+            font-weight: 900;
+        }
+
+        .el-tracer-position-grid button {
+            min-height: 30px;
+            cursor: pointer;
+        }
+
+        .el-tracer-position-grid button.is-active,
+        .el-tracer-template.is-active {
+            background-color: #000;
+            color: #fff;
+        }
+
+        .el-tracer-position-grid__empty {
+            border: 2px dashed #000;
+            display: grid;
+            place-items: center;
+            min-height: 30px;
+            font-size: 0.65rem;
+            font-weight: 900;
+            text-transform: uppercase;
+        }
+
+        .el-tracer-template-list {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.5rem;
+        }
+
+        .el-tracer-template {
+            display: grid;
+            grid-template-columns: 42px 1fr;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.4rem;
+            cursor: pointer;
+            text-align: left;
+        }
+
+        .el-tracer-template__preview {
+            display: block;
+            width: 38px;
+            height: 30px;
+            border: 2px solid #f00;
+            background-color: rgba(255, 0, 0, 0.2);
+        }
+
+        .el-tracer-template__preview--custom {
+            border-color: var(--custom-border, #ff0000);
+            background-color: var(--custom-bg, rgba(255, 0, 0, 0.2));
+        }
+
+        .el-tracer-template__name {
+            font-size: 0.72rem;
+            line-height: 1.15;
+            text-transform: uppercase;
+        }
+
+        .el-tracer-customize {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.5rem;
+            margin-top: 0.75rem;
+        }
+
+        .el-tracer-customize label {
+            display: grid;
+            gap: 0.25rem;
+            font-size: 0.68rem;
+            font-weight: 900;
+            text-transform: uppercase;
+        }
+
+        .el-tracer-customize input[type="color"] {
+            width: 100%;
+            height: 32px;
+            padding: 2px;
+            cursor: pointer;
+        }
+
+        .el-tracer-customize input[type="range"],
+        .el-tracer-customize input[type="number"] {
+            width: 100%;
+            accent-color: #000;
+        }
+
+        .el-tracer-markdown-options {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.5rem;
+        }
+
+        .el-tracer-markdown-options label {
+            display: grid;
+            gap: 0.25rem;
+            font-size: 0.68rem;
+            font-weight: 900;
+            text-transform: uppercase;
+        }
+
+        .el-tracer-markdown-options input,
+        .el-tracer-markdown-options select {
+            width: 100%;
+            min-width: 0;
+            border: 2px solid #000;
+            background-color: #fff;
+            color: #000;
+            padding: 0.35rem;
+            font: inherit;
+            text-transform: none;
+        }
+
+        .el-tracer-markdown-options .el-tracer-toggle {
+            align-items: center;
+            grid-template-columns: auto 1fr;
+        }
+
+        .el-tracer-markdown-options .el-tracer-toggle input {
+            width: 18px;
+            height: 18px;
+        }
     </style>
 </head>
 <body>
@@ -161,6 +426,146 @@
     <div class="el-tracer-card__actions">
         <button id="toggle-pointer-code" class="el-tracer-card__button el-tracer__button--toggle-off">Enable Tracking</button>
     </div>
+    <div class="el-tracer-dock" aria-label="Node Markup tools">
+        <button id="settings-toggle" class="el-tracer-icon-button" type="button" aria-label="Settings" aria-expanded="false" aria-controls="settings-panel">
+            <span class="el-tracer-icon-button__icon" aria-hidden="true"></span>
+        </button>
+    </div>
+    <section id="settings-panel" class="el-tracer-settings" aria-hidden="true">
+        <div class="el-tracer-settings__group">
+            <div class="el-tracer-settings__title">Copy Paths</div>
+            <div class="el-tracer-settings__row">
+                <span>Selector</span>
+                <div class="el-tracer-segmented">
+                    <label><input type="radio" name="selector-path-mode" value="full">Full</label>
+                    <label><input type="radio" name="selector-path-mode" value="relative">Relative</label>
+                </div>
+            </div>
+            <div class="el-tracer-settings__row">
+                <span>XPath</span>
+                <div class="el-tracer-segmented">
+                    <label><input type="radio" name="xpath-path-mode" value="full">Full</label>
+                    <label><input type="radio" name="xpath-path-mode" value="relative">Relative</label>
+                </div>
+            </div>
+        </div>
+
+        <div class="el-tracer-settings__group">
+            <div class="el-tracer-settings__title">Element Metadata</div>
+            <label class="el-tracer-toggle">
+                <input id="metadata-enabled" type="checkbox">
+                Show current highlight metadata
+            </label>
+            <div class="el-tracer-position-grid" aria-label="Metadata position">
+                <button type="button" data-position="top-left" title="Top left">TL</button>
+                <button type="button" data-position="top-center" title="Top center">TC</button>
+                <button type="button" data-position="top-right" title="Top right">TR</button>
+                <button type="button" data-position="center-left" title="Center left">CL</button>
+                <span class="el-tracer-position-grid__empty">Element</span>
+                <button type="button" data-position="center-right" title="Center right">CR</button>
+                <button type="button" data-position="bottom-left" title="Bottom left">BL</button>
+                <button type="button" data-position="bottom-center" title="Bottom center">BC</button>
+                <button type="button" data-position="bottom-right" title="Bottom right">BR</button>
+            </div>
+        </div>
+
+        <div class="el-tracer-settings__group">
+            <div class="el-tracer-settings__title">Highlight Template</div>
+            <div class="el-tracer-template-list">
+                <button type="button" class="el-tracer-template" data-template="red">
+                    <span class="el-tracer-template__preview" aria-hidden="true"></span>
+                    <span class="el-tracer-template__name">Red marker</span>
+                </button>
+                <button type="button" class="el-tracer-template" data-template="custom">
+                    <span id="custom-template-preview" class="el-tracer-template__preview el-tracer-template__preview--custom" aria-hidden="true"></span>
+                    <span class="el-tracer-template__name">Custom</span>
+                </button>
+            </div>
+            <div class="el-tracer-customize">
+                <label>
+                    Fill
+                    <input id="highlight-fill-color" type="color" value="#ff0000">
+                </label>
+                <label>
+                    Opacity
+                    <input id="highlight-fill-opacity" type="range" min="0" max="1" step="0.05" value="0.2">
+                </label>
+                <label class="el-tracer-toggle">
+                    <input id="highlight-border-enabled" type="checkbox">
+                    Border
+                </label>
+                <label>
+                    Border color
+                    <input id="highlight-border-color" type="color" value="#ff0000">
+                </label>
+                <label>
+                    Border width
+                    <input id="highlight-border-width" type="number" min="0" max="12" step="1" value="2">
+                </label>
+            </div>
+        </div>
+
+        <div class="el-tracer-settings__group">
+            <div class="el-tracer-settings__title">Markdown</div>
+            <div class="el-tracer-markdown-options">
+                <label class="el-tracer-toggle">
+                    <input id="markdown-prefer-native-parser" type="checkbox">
+                    Native parser
+                </label>
+                <label class="el-tracer-toggle">
+                    <input id="markdown-keep-data-images" type="checkbox">
+                    Keep data images
+                </label>
+                <label>
+                    Code fence
+                    <input id="markdown-code-fence" type="text" value="```">
+                </label>
+                <label>
+                    Bullet marker
+                    <input id="markdown-bullet-marker" type="text" maxlength="2" value="*">
+                </label>
+                <label>
+                    Code blocks
+                    <select id="markdown-code-block-style">
+                        <option value="fenced">Fenced</option>
+                        <option value="indented">Indented</option>
+                    </select>
+                </label>
+                <label>
+                    Max newlines
+                    <input id="markdown-max-newlines" type="number" min="1" max="10" step="1" value="3">
+                </label>
+                <label>
+                    Emphasis
+                    <input id="markdown-em-delimiter" type="text" value="_">
+                </label>
+                <label>
+                    Strong
+                    <input id="markdown-strong-delimiter" type="text" value="**">
+                </label>
+                <label>
+                    Strike
+                    <input id="markdown-strike-delimiter" type="text" value="~~">
+                </label>
+                <label>
+                    Ignore elements
+                    <input id="markdown-ignore-elements" type="text" placeholder="script, style">
+                </label>
+                <label>
+                    Block elements
+                    <input id="markdown-block-elements" type="text" placeholder="article, section">
+                </label>
+                <label class="el-tracer-toggle">
+                    <input id="markdown-reference-links" type="checkbox">
+                    Reference links
+                </label>
+                <label class="el-tracer-toggle">
+                    <input id="markdown-inline-links" type="checkbox">
+                    Inline URL links
+                </label>
+            </div>
+        </div>
+    </section>
 </div>
 
 <script src="popup.js"></script>
