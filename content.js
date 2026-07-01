@@ -8,6 +8,8 @@ let markdownSnippet = null;
 let markdownContentElement = null;
 let markdownTextarea = null;
 let markdownConfigurePanel = null;
+let selectorBuilderPanel = null;
+let selectorBuilderState = null;
 let activeMarkdown = "";
 let activeMarkdownSourceHtml = "";
 let markdownSnippetPosition = null;
@@ -70,6 +72,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         case "NODE_MARKUP_CONVERT_SELECTION_TO_MARKDOWN":
             setNodeMarkupSettings(message.settings);
             convertSelectionToMarkdown(message.selectionClass)
+                .then(() => sendResponse({ ok: true }))
+                .catch((error) => sendResponse({ ok: false, error: error?.message }));
+            return true;
+        case "NODE_MARKUP_OPEN_SELECTOR_BUILDER":
+            setNodeMarkupSettings(message.settings);
+            openSelectorBuilder(message.selectionClass)
                 .then(() => sendResponse({ ok: true }))
                 .catch((error) => sendResponse({ ok: false, error: error?.message }));
             return true;
@@ -256,6 +264,488 @@ function updateMetadataPosition() {
 function removeMetadataBadge() {
     metadataBadge?.remove();
     metadataBadge = null;
+}
+
+async function openSelectorBuilder(selectedClass) {
+    const selectedElement = document.querySelector(`.${selectedClass}`)
+        ?? highlightedElement
+        ?? document.querySelector(".hover-highlight");
+
+    if (!selectedElement) {
+        showMarkdownToast("No element selected.");
+        return;
+    }
+
+    selectedElement.classList.remove(selectedClass);
+    removeSelectorBuilderHighlights();
+
+    const target = selectedElement;
+    const initialToken = chooseDefaultSelectorToken(target);
+    selectorBuilderState = {
+        target,
+        currentElement: target,
+        steps: [
+            {
+                element: target,
+                token: initialToken.selector,
+            },
+        ],
+        mode: "unique",
+        combinator: ">",
+        validation: null,
+        parentClusters: [],
+    };
+
+    renderSelectorBuilder();
+}
+
+function renderSelectorBuilder() {
+    if (!selectorBuilderState) return;
+
+    if (!selectorBuilderPanel) {
+        selectorBuilderPanel = document.createElement("section");
+        selectorBuilderPanel.className = "node-markup-selector-builder";
+        selectorBuilderPanel.setAttribute("aria-label", "CSS selector builder");
+        document.body.appendChild(selectorBuilderPanel);
+    }
+
+    const currentMeta = getSelectorElementMeta(selectorBuilderState.currentElement);
+    const tokens = generateSelectorTokens(selectorBuilderState.currentElement);
+    const currentStep = getCurrentSelectorStep();
+    const validation = validateSelectorBuilder();
+    selectorBuilderState.validation = validation;
+    selectorBuilderState.parentClusters = buildParentClusters(validation.matches);
+
+    selectorBuilderPanel.innerHTML = `
+        <div class="node-markup-selector-builder__header">
+            <div>
+                <div class="node-markup-selector-builder__eyebrow">CSS Selector Builder</div>
+                <div class="node-markup-selector-builder__target">${escapeAttribute(formatElementLabel(selectorBuilderState.target))}</div>
+            </div>
+            <button class="node-markup-selector-builder__icon-button" type="button" data-selector-action="close" aria-label="Close" title="Close">x</button>
+        </div>
+        <div class="node-markup-selector-builder__body">
+            <div class="node-markup-selector-builder__meta">
+                <div><span>Node</span><strong>${escapeAttribute(formatElementLabel(selectorBuilderState.currentElement))}</strong></div>
+                <div><span>ID</span><strong>${escapeAttribute(currentMeta.id || "none")}</strong></div>
+                <div><span>Classes</span><strong>${escapeAttribute(currentMeta.classes.join(" ") || "none")}</strong></div>
+                <div><span>Attrs</span><strong>${escapeAttribute(formatSelectorAttributes(currentMeta.attrs))}</strong></div>
+                <div><span>Text</span><strong>${escapeAttribute(currentMeta.textPreview || "none")}</strong></div>
+                <div><span>Depth</span><strong>${selectorBuilderState.steps.length - 1}</strong></div>
+                <div><span>Mode</span><strong>${selectorBuilderState.mode}</strong></div>
+            </div>
+            <div class="node-markup-selector-builder__section">
+                <div class="node-markup-selector-builder__section-title">Keeper Tokens</div>
+                <div class="node-markup-selector-builder__tokens">
+                    ${tokens.map((token) => renderSelectorToken(token, currentStep.token)).join("")}
+                </div>
+            </div>
+            <div class="node-markup-selector-builder__section">
+                <div class="node-markup-selector-builder__section-title">Selector Console</div>
+                <pre class="node-markup-selector-builder__selector">${escapeAttribute(validation.selector || "")}</pre>
+                <div class="node-markup-selector-builder__diagnostics ${validationStatusClass(validation)}">
+                    <span>Matches: ${validation.matchCount}</span>
+                    <span>Target: ${validation.includesTarget ? "yes" : "no"}</span>
+                    <span>${escapeAttribute(getValidationLabel(validation))}</span>
+                </div>
+                ${renderParentClusters(selectorBuilderState.parentClusters)}
+            </div>
+            <div class="node-markup-selector-builder__controls" role="group" aria-label="Selector builder controls">
+                <button type="button" data-selector-action="mode" data-selector-mode="unique" class="${selectorBuilderState.mode === "unique" ? "is-active" : ""}">Unique</button>
+                <button type="button" data-selector-action="mode" data-selector-mode="group" class="${selectorBuilderState.mode === "group" ? "is-active" : ""}">Group</button>
+                <button type="button" data-selector-action="combinator" data-selector-combinator=">" class="${selectorBuilderState.combinator === ">" ? "is-active" : ""}">&gt;</button>
+                <button type="button" data-selector-action="combinator" data-selector-combinator=" " class="${selectorBuilderState.combinator === " " ? "is-active" : ""}">space</button>
+            </div>
+        </div>
+        <div class="node-markup-selector-builder__footer">
+            <button type="button" data-selector-action="back" ${selectorBuilderState.steps.length <= 1 ? "disabled" : ""}>Back</button>
+            <button type="button" data-selector-action="parent" ${selectorBuilderState.currentElement.parentElement ? "" : "disabled"}>Next Parent</button>
+            <button type="button" data-selector-action="copy" ${validation.selector ? "" : "disabled"}>Copy</button>
+        </div>
+    `;
+
+    bindSelectorBuilderEvents();
+    highlightSelectorBuilderMatches(validation.matches);
+}
+
+function renderSelectorToken(token, selectedToken) {
+    const selectedClass = token.selector === selectedToken ? " is-active" : "";
+    return `
+        <button class="node-markup-selector-token${selectedClass}" type="button" data-selector-action="token" data-token="${escapeAttribute(token.selector)}">
+            <span>${escapeAttribute(token.label)}</span>
+            <small>${escapeAttribute(token.quality)}</small>
+        </button>
+    `;
+}
+
+function renderParentClusters(clusters) {
+    if (!clusters.length) return "";
+
+    return `
+        <div class="node-markup-selector-builder__clusters">
+            <div class="node-markup-selector-builder__section-title">Parent Clusters</div>
+            ${clusters.map((cluster) => `
+                <div class="node-markup-selector-builder__cluster">
+                    <span>${escapeAttribute(cluster.signature)}</span>
+                    <strong>${cluster.count}</strong>
+                </div>
+            `).join("")}
+        </div>
+    `;
+}
+
+function bindSelectorBuilderEvents() {
+    if (!selectorBuilderPanel || !selectorBuilderState) return;
+
+    selectorBuilderPanel.querySelectorAll("[data-selector-action]").forEach((control) => {
+        control.addEventListener("click", () => handleSelectorBuilderAction(control));
+    });
+}
+
+function handleSelectorBuilderAction(control) {
+    if (!selectorBuilderState) return;
+
+    switch (control.dataset.selectorAction) {
+        case "close":
+            closeSelectorBuilder();
+            return;
+        case "token":
+            getCurrentSelectorStep().token = control.dataset.token || "";
+            renderSelectorBuilder();
+            return;
+        case "mode":
+            selectorBuilderState.mode = control.dataset.selectorMode || "unique";
+            renderSelectorBuilder();
+            return;
+        case "combinator":
+            selectorBuilderState.combinator = control.dataset.selectorCombinator === " " ? " " : ">";
+            renderSelectorBuilder();
+            return;
+        case "parent":
+            moveSelectorBuilderToParent();
+            return;
+        case "back":
+            moveSelectorBuilderBack();
+            return;
+        case "copy":
+            copySelectorBuilderSelector();
+            return;
+    }
+}
+
+function moveSelectorBuilderToParent() {
+    if (!selectorBuilderState?.currentElement?.parentElement) return;
+
+    const parent = selectorBuilderState.currentElement.parentElement;
+    selectorBuilderState.currentElement = parent;
+    selectorBuilderState.steps.push({
+        element: parent,
+        token: chooseDefaultSelectorToken(parent).selector,
+    });
+    renderSelectorBuilder();
+}
+
+function moveSelectorBuilderBack() {
+    if (!selectorBuilderState || selectorBuilderState.steps.length <= 1) return;
+
+    selectorBuilderState.steps.pop();
+    selectorBuilderState.currentElement = getCurrentSelectorStep().element;
+    renderSelectorBuilder();
+}
+
+async function copySelectorBuilderSelector() {
+    const selector = selectorBuilderState?.validation?.selector;
+    if (!selector) return;
+
+    await navigator.clipboard.writeText(selector);
+    showMarkdownToast("Selector copied.");
+}
+
+function closeSelectorBuilder() {
+    removeSelectorBuilderHighlights();
+    selectorBuilderPanel?.remove();
+    selectorBuilderPanel = null;
+    selectorBuilderState = null;
+}
+
+function getCurrentSelectorStep() {
+    return selectorBuilderState.steps[selectorBuilderState.steps.length - 1];
+}
+
+function composeSelectorBuilderSelector() {
+    if (!selectorBuilderState) return "";
+
+    return selectorBuilderState.steps
+        .slice()
+        .reverse()
+        .map((step) => step.token)
+        .filter(Boolean)
+        .join(selectorBuilderState.combinator === " " ? " " : " > ");
+}
+
+function validateSelectorBuilder() {
+    const selector = composeSelectorBuilderSelector();
+    const result = {
+        selector,
+        matches: [],
+        matchCount: 0,
+        includesTarget: false,
+        uniqueValid: false,
+        groupValid: false,
+        error: null,
+    };
+
+    if (!selector) return result;
+
+    try {
+        result.matches = Array.from(document.querySelectorAll(selector))
+            .filter((element) => !isNodeMarkupUi(element));
+        result.matchCount = result.matches.length;
+        result.includesTarget = result.matches.includes(selectorBuilderState.target);
+        result.uniqueValid = result.includesTarget && result.matchCount === 1;
+        result.groupValid = result.includesTarget && result.matchCount >= 1;
+    } catch (error) {
+        result.error = error?.message || "Invalid selector";
+    }
+
+    return result;
+}
+
+function validationStatusClass(validation) {
+    if (validation.error) return "is-invalid";
+    if (selectorBuilderState.mode === "unique") return validation.uniqueValid ? "is-valid" : "is-warning";
+    return validation.groupValid ? "is-valid" : "is-warning";
+}
+
+function getValidationLabel(validation) {
+    if (validation.error) return validation.error;
+    if (selectorBuilderState.mode === "unique") {
+        return validation.uniqueValid ? "valid unique selector" : "not unique";
+    }
+
+    return validation.groupValid ? "valid group selector" : "target missing";
+}
+
+function highlightSelectorBuilderMatches(matches) {
+    removeSelectorBuilderHighlights();
+
+    matches.forEach((element) => {
+        element.classList.add("node-markup-selector-match");
+    });
+
+    selectorBuilderState?.target?.classList.add("node-markup-selector-target");
+    selectorBuilderState?.currentElement?.classList.add("node-markup-selector-current");
+}
+
+function removeSelectorBuilderHighlights() {
+    document
+        .querySelectorAll(".node-markup-selector-match, .node-markup-selector-target, .node-markup-selector-current")
+        .forEach((element) => {
+            element.classList.remove("node-markup-selector-match", "node-markup-selector-target", "node-markup-selector-current");
+        });
+}
+
+function buildParentClusters(matches) {
+    if (!matches || matches.length < 2) return [];
+
+    const clusters = new Map();
+    matches.forEach((match) => {
+        const parent = match.parentElement;
+        if (!parent || isNodeMarkupUi(parent)) return;
+
+        const signature = getParentClusterSignature(parent);
+        const existing = clusters.get(signature) ?? { signature, count: 0 };
+        existing.count += 1;
+        clusters.set(signature, existing);
+    });
+
+    return Array.from(clusters.values())
+        .sort((a, b) => b.count - a.count || a.signature.localeCompare(b.signature))
+        .slice(0, 4);
+}
+
+function getParentClusterSignature(element) {
+    const tag = element.tagName.toLowerCase();
+    const id = element.id ? `#${element.id}` : "";
+    const classes = Array.from(element.classList)
+        .filter(isSelectorUserClass)
+        .slice(0, 2)
+        .map((className) => `.${className}`)
+        .join("");
+
+    return `${tag}${id}${classes}`;
+}
+
+function getSelectorElementMeta(element) {
+    const attrs = {};
+    Array.from(element.attributes ?? []).forEach((attr) => {
+        if (isUsefulSelectorAttribute(attr.name, attr.value)) {
+            attrs[attr.name] = attr.value;
+        }
+    });
+
+    return {
+        tag: element.tagName.toLowerCase(),
+        id: element.id || null,
+        classes: Array.from(element.classList).filter(isSelectorUserClass),
+        attrs,
+        textPreview: getSelectorTextPreview(element),
+        nthOfType: getNthOfType(element),
+        nthChild: Array.from(element.parentElement?.children ?? []).indexOf(element) + 1,
+    };
+}
+
+function generateSelectorTokens(element) {
+    const meta = getSelectorElementMeta(element);
+    const tokens = [];
+
+    if (meta.id) {
+        tokens.push(createSelectorToken(`#${cssEscape(meta.id)}`, "id", "recommended", `id ${meta.id}`));
+        tokens.push(createSelectorToken(`${meta.tag}#${cssEscape(meta.id)}`, "tag-id", "recommended", `${meta.tag} with id`));
+    }
+
+    meta.classes.forEach((className) => {
+        const generated = isGeneratedClassName(className);
+        tokens.push(createSelectorToken(`.${cssEscape(className)}`, "class", generated ? "advanced" : "recommended", className));
+        tokens.push(createSelectorToken(`${meta.tag}.${cssEscape(className)}`, "tag-class", generated ? "advanced" : "acceptable", `${meta.tag}.${className}`));
+    });
+
+    Object.entries(meta.attrs).forEach(([name, value]) => {
+        const selector = `[${name}="${cssStringEscape(value)}"]`;
+        const quality = /^(data-testid|data-test|data-cy|aria-label|name)$/i.test(name)
+            ? "recommended"
+            : "acceptable";
+        tokens.push(createSelectorToken(selector, "attribute", quality, `${name} attribute`));
+        tokens.push(createSelectorToken(`${meta.tag}${selector}`, "tag-attribute", quality, `${meta.tag} ${name}`));
+    });
+
+    tokens.push(createSelectorToken(meta.tag, "tag", "acceptable", "element tag"));
+    tokens.push(createSelectorToken(`${meta.tag}:nth-of-type(${meta.nthOfType})`, "nth", "risky", "position fallback"));
+
+    return uniqueSelectorTokens(tokens)
+        .sort((a, b) => selectorQualityRank(a.quality) - selectorQualityRank(b.quality) || a.label.length - b.label.length);
+}
+
+function chooseDefaultSelectorToken(element) {
+    const tokens = generateSelectorTokens(element);
+    return tokens.find((token) => token.quality === "recommended")
+        ?? tokens.find((token) => token.quality === "acceptable")
+        ?? tokens[0]
+        ?? createSelectorToken(element.tagName.toLowerCase(), "tag", "acceptable", "element tag");
+}
+
+function createSelectorToken(selector, kind, quality, reason) {
+    return {
+        label: selector,
+        selector,
+        kind,
+        quality,
+        reason,
+    };
+}
+
+function uniqueSelectorTokens(tokens) {
+    const seen = new Set();
+    return tokens.filter((token) => {
+        if (!token.selector || seen.has(token.selector)) return false;
+        seen.add(token.selector);
+        return true;
+    });
+}
+
+function selectorQualityRank(quality) {
+    return {
+        recommended: 0,
+        acceptable: 1,
+        risky: 2,
+        advanced: 3,
+    }[quality] ?? 4;
+}
+
+function isUsefulSelectorAttribute(name, value) {
+    if (!value || value.length > 96 || !/^[a-zA-Z_:-][\w:.-]*$/.test(name)) return false;
+
+    return /^(data-testid|data-test|data-cy|aria-label|name|type|href|title|role|alt)$/i.test(name);
+}
+
+function isSelectorUserClass(className) {
+    return ![
+        "hover-highlight",
+        selectionClass,
+        "node-markup-selector-match",
+        "node-markup-selector-target",
+        "node-markup-selector-current",
+    ].includes(className);
+}
+
+function isGeneratedClassName(className) {
+    return classComplexityScore(className) >= 40;
+}
+
+function classComplexityScore(className) {
+    let score = 0;
+    score += className.length;
+    score += (className.match(/[-_]/g)?.length ?? 0) * 3;
+    score += (className.match(/[0-9]/g)?.length ?? 0) * 4;
+
+    if (/^(css|sc|jsx|style|emotion|chakra|mui)-?[a-z0-9_-]+/i.test(className)) {
+        score += 50;
+    }
+
+    if (/^[a-z]{1,12}$/i.test(className)) {
+        score -= 15;
+    }
+
+    if (/^(quote|next|prev|title|author|price|card|item|row|result|article|content|pagination|pager)$/i.test(className)) {
+        score -= 25;
+    }
+
+    return score;
+}
+
+function formatElementLabel(element) {
+    const meta = getSelectorElementMeta(element);
+    const id = meta.id ? `#${meta.id}` : "";
+    const classes = meta.classes.slice(0, 2).map((className) => `.${className}`).join("");
+
+    return `<${meta.tag}${id}${classes}>`;
+}
+
+function formatSelectorAttributes(attrs) {
+    const entries = Object.entries(attrs);
+    if (!entries.length) return "none";
+
+    return entries
+        .slice(0, 3)
+        .map(([name, value]) => `${name}="${value}"`)
+        .join(" ");
+}
+
+function getSelectorTextPreview(element) {
+    const text = String(element.textContent || "").replace(/\s+/g, " ").trim();
+    if (!text) return "";
+
+    return text.length > 56 ? `${text.slice(0, 55)}...` : text;
+}
+
+function getNthOfType(element) {
+    const tag = element.tagName;
+    const siblings = Array.from(element.parentElement?.children ?? [])
+        .filter((sibling) => sibling.tagName === tag);
+
+    return Math.max(1, siblings.indexOf(element) + 1);
+}
+
+function cssEscape(value) {
+    if (typeof CSS !== "undefined" && typeof CSS.escape === "function") {
+        return CSS.escape(value);
+    }
+
+    return String(value).replace(/([.#:[\]()/>,+~*^$= ])/g, "\\$1");
+}
+
+function cssStringEscape(value) {
+    return String(value).replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, "\\a ");
 }
 
 async function convertSelectionToMarkdown(selectedClass) {
@@ -723,7 +1213,7 @@ function setSyncStorageValue(key, value) {
 }
 
 function isNodeMarkupUi(element) {
-    return Boolean(element.closest(".node-markup-markdown-snippet, .node-markup-markdown-toast, .node-markup-metadata-badge"));
+    return Boolean(element.closest(".node-markup-markdown-snippet, .node-markup-markdown-toast, .node-markup-metadata-badge, .node-markup-selector-builder"));
 }
 
 function getEventElement(event) {

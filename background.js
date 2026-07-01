@@ -4,6 +4,7 @@
  * "el-copy.js-path" -> copy JS path
  * "el-copy.full-xpath" -> copy XPath
  * "el-markdown.convert" -> render selected HTML as Markdown
+ * "el-selector.build" -> open assisted CSS selector builder
  */
 
 const TRACKING_KEY_PREFIX = "trackingEnabled_";
@@ -46,6 +47,7 @@ chrome.runtime.onInstalled.addListener(() => {
             { id: "separator-1", type: "separator" },
             { id: "el-copy.outerHTML", title: "Copy outerHTML" },
             { id: "el-markdown.convert", title: "Convert to Markdown" },
+            { id: "el-selector.build", title: "Build CSS selector" },
             // { id: "el-copy.selector", title: "Copy relative selector" },
             { id: "el-copy.full-selector", title: "Copy selector" },
             { id: "el-copy.js-path", title: "Copy JS path" },
@@ -119,6 +121,15 @@ async function handleContextMenuClick(action, tabId) {
         if (action === "el-markdown.convert") {
             await sendMessageToTab(tabId, {
                 type: "NODE_MARKUP_CONVERT_SELECTION_TO_MARKDOWN",
+                selectionClass,
+                settings,
+            });
+            return;
+        }
+
+        if (action === "el-selector.build") {
+            await sendMessageToTab(tabId, {
+                type: "NODE_MARKUP_OPEN_SELECTOR_BUILDER",
                 selectionClass,
                 settings,
             });
